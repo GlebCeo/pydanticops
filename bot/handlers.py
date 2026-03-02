@@ -70,8 +70,50 @@ S = {
             "en": "📋 *View Logs*\n\nType in chat:\n`Show sglang logs last 50 lines`\n`Show nginx logs`\n\nLog tail comes directly to Telegram.",
         },
         "m_help": {
-            "ru": "❓ *Помощь*\n\n*Команды:*\n`/status` — Docker + GPU + SGLang\n`/scan` — OSINT сканирование\n`/start` — главное меню\n`/myid` — твой Telegram ID\n\n*Натуральный язык:*\nПросто пиши что нужно — бот поймёт через Groq llama-3.3-70b ⚡\n\n*Safety:* опасные команды требуют ✅",
-            "en": "❓ *Help*\n\n*Commands:*\n`/status` — Docker + GPU + SGLang\n`/scan` — OSINT scan\n`/start` — main menu\n`/myid` — your Telegram ID\n\n*Natural language:*\nJust type what you need — bot understands via Groq llama-3.3-70b ⚡\n\n*Safety:* destructive actions require ✅",
+            "ru": (
+                "❓ *Все команды*\n\n"
+                "*📊 Мониторинг:*\n"
+                "`Сколько места на диске?`\n"
+                "`Покажи нагрузку CPU и RAM`\n"
+                "`Какие порты открыты?`\n"
+                "`docker stats`\n"
+                "`/status` — Docker + GPU + SGLang\n\n"
+                "*🚀 Деплой и управление:*\n"
+                "`Подними DeepSeek-R1 на 30000 с 12 ГБ VRAM`\n"
+                "`Перезапусти nginx`\n"
+                "`Покажи логи nginx последние 50 строк`\n"
+                "`Убей процесс sglang`\n\n"
+                "*🔍 Сеть и безопасность:*\n"
+                "`Пингани 8.8.8.8`\n"
+                "`Заблокируй 1.2.3.4`\n"
+                "`/scan` — OSINT атакующие IP\n\n"
+                "*📄 Файлы:*\n"
+                "`Покажи файл /etc/nginx/nginx.conf`\n\n"
+                "⚡ *Groq llama-3.3-70b* — понимает любые формулировки\n"
+                "🔒 Опасные команды требуют ✅"
+            ),
+            "en": (
+                "❓ *All commands*\n\n"
+                "*📊 Monitoring:*\n"
+                "`How much disk space?`\n"
+                "`Show CPU and RAM load`\n"
+                "`What ports are open?`\n"
+                "`docker stats`\n"
+                "`/status` — Docker + GPU + SGLang\n\n"
+                "*🚀 Deploy & management:*\n"
+                "`Launch DeepSeek-R1 on 30000 with 12GB VRAM`\n"
+                "`Restart nginx`\n"
+                "`Show nginx logs last 50 lines`\n"
+                "`Kill process sglang`\n\n"
+                "*🔍 Network & security:*\n"
+                "`Ping 8.8.8.8`\n"
+                "`Block 1.2.3.4`\n"
+                "`/scan` — OSINT attacking IPs\n\n"
+                "*📄 Files:*\n"
+                "`Show file /etc/nginx/nginx.conf`\n\n"
+                "⚡ *Groq llama-3.3-70b* — understands any phrasing\n"
+                "🔒 Dangerous commands require ✅"
+            ),
         },
     },
 }

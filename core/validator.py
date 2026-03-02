@@ -1,110 +1,131 @@
-from __future__ import annotations
-import os, re, json
-from openai import AsyncOpenAI
-from pydantic import ValidationError
-from core.schemas import (AnyCommand, DeployCommand, RestartCommand,
-    BlockIPCommand, LogsCommand, StatusCommand, ScanCommand)
+import os, re, json, logging
+from core.schemas import *
 
-_client = AsyncOpenAI(
-    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-    api_key=os.getenv("OPENAI_API_KEY", "local"),
-)
+log = logging.getLogger(__name__)
 
-_SYSTEM = """
-Разбери запрос и верни СТРОГО JSON с полем command_type.
-Типы: DeployCommand, RestartCommand, BlockIPCommand, LogsCommand, StatusCommand, ScanCommand.
-dry_run=true если пользователь явно не сказал "запусти/выполни/давай".
-Если не можешь распознать: {"error": "причина"}.
-Примеры:
-"Подними DeepSeek на 30000 с 12 ГБ VRAM" -> {"command_type":"DeployCommand","model_name":"deepseek","port":30000,"vram_gb":12.0,"dry_run":true}
-"Логи sglang 100 строк" -> {"command_type":"LogsCommand","service":"sglang","tail":100}
-"Заблокируй 1.2.3.4" -> {"command_type":"BlockIPCommand","ip":"1.2.3.4","reason":"manual","dry_run":true}
-"Статус" -> {"command_type":"StatusCommand"}
-"""
-
-_MAP = {
-    "DeployCommand": DeployCommand, "RestartCommand": RestartCommand,
-    "BlockIPCommand": BlockIPCommand, "LogsCommand": LogsCommand,
-    "StatusCommand": StatusCommand, "ScanCommand": ScanCommand,
-}
-
-# ── Keyword fallback (работает без LLM) ───────────────────────
-def _keyword_parse(text: str) -> AnyCommand | None:
-    t = text.lower().strip()
-
-    # Статус
-    if any(w in t for w in ["статус", "status", "состояние", "что запущено"]):
-        return StatusCommand()
-
-    # Сканирование
-    if any(w in t for w in ["скан", "scan", "атак", "osint", "подозрительн"]):
-        return ScanCommand()
-
-    # Логи: "логи nginx", "покажи логи sglang 100"
-    m = re.search(r"лог[и]?\s+([a-z0-9_\-]+)(?:\s+(\d+))?|log[s]?\s+([a-z0-9_\-]+)(?:\s+(\d+))?", t)
+def _keyword_parse(text: str):
+    t = text.lower()
+    # Deploy
+    m = re.search(r'(подними|запусти|deploy|launch|run)\s+([\w\-\.]+)\s+.*?(\d+)\s*гб', t)
     if m:
-        service = m.group(1) or m.group(3)
-        tail = int(m.group(2) or m.group(4) or 50)
-        return LogsCommand(service=service, tail=min(tail, 500))
-
-    # Перезапуск: "перезапусти sglang"
-    m = re.search(r"перезапуст[и|ь]\s+([a-z0-9_\-]+)|restart\s+([a-z0-9_\-]+)", t)
+        port_m = re.search(r'(\d{4,5})', t)
+        return DeployCommand(model=m.group(2), port=int(port_m.group(1)) if port_m else 30000, vram_gb=float(m.group(3)))
+    # Restart
+    m = re.search(r'(перезапусти|рестарт|restart)\s+([\w\-]+)', t)
     if m:
-        return RestartCommand(service=m.group(1) or m.group(2))
-
-    # Блокировка IP: "заблокируй 1.2.3.4"
-    m = re.search(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", t)
-    if m and any(w in t for w in ["блокир", "ban", "block", "запрет"]):
-        return BlockIPCommand(ip=m.group(1), reason="Blocked via bot")
-
-    # Деплой: "подними X на PORT с N ГБ / GB VRAM"
-    m = re.search(
-        r"(подним|запуст|деплой|deploy|run|launch)[^\n]*?([a-zA-Z0-9\-\/\.]{3,}).*?(\d{4,5}).*?(\d+[\.,]?\d*)\s*(гб|gb|g)",
-        t, re.IGNORECASE
-    )
+        return RestartCommand(service=m.group(2))
+    # Block IP
+    m = re.search(r'(заблокируй|block)\s+([\d\.]+)', t)
     if m:
-        model = m.group(2)
-        port = int(m.group(3))
-        vram = float(m.group(4).replace(",", "."))
-        return DeployCommand(model_name=model, port=port, vram_gb=vram)
-
+        return BlockIPCommand(ip=m.group(2))
+    # Logs
+    m = re.search(r'(логи|logs?)\s+([\w\-]+)(?:\s+(\d+))?', t)
+    if m:
+        return LogsCommand(service=m.group(2), lines=int(m.group(3)) if m.group(3) else 50)
+    # Disk
+    if any(x in t for x in ['диск', 'disk', 'место', 'df']):
+        return DiskCommand()
+    # SysInfo
+    if any(x in t for x in ['cpu', 'ram', 'память', 'нагрузка', 'sysinfo', 'система', 'uptime']):
+        return SystemInfoCommand()
+    # Ports
+    if any(x in t for x in ['порт', 'port', 'netstat', 'listen']):
+        return PortsCommand()
+    # Docker stats
+    if any(x in t for x in ['docker stats', 'статистика', 'ресурс']):
+        return DockerStatsCommand()
+    # Ping
+    m = re.search(r'(пингани|ping)\s+([\w\.\-]+)', t)
+    if m:
+        return PingCommand(host=m.group(2))
+    # Kill process
+    m = re.search(r'(убей|убить|kill)\s+([\w\-]+)', t)
+    if m:
+        return KillProcessCommand(process=m.group(2))
+    # Read file
+    m = re.search(r'(покажи файл|cat|читай)\s+(/[\w/\.\-]+)', t)
+    if m:
+        return ReadFileCommand(path=m.group(2))
     return None
 
-
-async def parse_command(text: str) -> AnyCommand | str:
-    # 1. Сначала пробуем keyword-парсер (мгновенно, без LLM)
-    kw = _keyword_parse(text)
-    if kw is not None:
-        return kw
-
-    # 2. Fallback на LLM если keyword не сработал
+async def _llm_parse(text: str):
     try:
-        resp = await _client.chat.completions.create(
-            model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user", "content": text},
-            ],
-            temperature=0,
-            max_tokens=256,
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(
+            base_url=os.getenv("OPENAI_BASE_URL", "http://localhost:30000/v1"),
+            api_key=os.getenv("OPENAI_API_KEY", "local"),
+        )
+        model = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+
+        system = """You are a server command parser. Extract commands from user text and return ONLY valid JSON.
+
+Available commands:
+- deploy: {"action":"deploy","model":"name","port":30000,"vram_gb":12}
+- restart: {"action":"restart","service":"name"}
+- block_ip: {"action":"block_ip","ip":"1.2.3.4"}
+- logs: {"action":"logs","service":"name","lines":50}
+- status: {"action":"status"}
+- scan: {"action":"scan"}
+- disk: {"action":"disk"}
+- sysinfo: {"action":"sysinfo"}
+- ports: {"action":"ports"}
+- docker_stats: {"action":"docker_stats"}
+- ping: {"action":"ping","host":"google.com"}
+- kill_process: {"action":"kill_process","process":"name"}
+- read_file: {"action":"read_file","path":"/etc/nginx/nginx.conf"}
+
+Return ONLY the JSON object, no explanation. If unclear, return {"action":"unknown"}."""
+
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": text}],
+            temperature=0, max_tokens=150
         )
         raw = resp.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"): raw = raw[4:]
-        data = json.loads(raw)
-        if "error" in data: return f"🤔 {data['error']}"
-        cmd_type = data.pop("command_type", None)
-        if cmd_type not in _MAP: return f"❌ Неизвестный тип: `{cmd_type}`"
-        return _MAP[cmd_type](**data)
-    except Exception:
-        # LLM недоступен — говорим что не поняли
-        return (
-            "🤔 Не понял команду. Попробуй:\n"
-            "• `Статус`\n"
-            "• `Логи sglang`\n"
-            "• `Перезапусти nginx`\n"
-            "• `Подними deepseek на 30000 с 12 ГБ VRAM`\n"
-            "• `Заблокируй 1.2.3.4`\n"
-            "• `/scan`"
-        )
+        # Extract JSON
+        m = re.search(r'\{.*\}', raw, re.DOTALL)
+        if not m:
+            return None
+        data = json.loads(m.group())
+        if data.get("action") == "unknown":
+            return None
+
+        action = data.get("action")
+        if action == "deploy":
+            return DeployCommand(**{k: v for k, v in data.items()})
+        elif action == "restart":
+            return RestartCommand(**{k: v for k, v in data.items()})
+        elif action == "block_ip":
+            return BlockIPCommand(**{k: v for k, v in data.items()})
+        elif action == "logs":
+            return LogsCommand(**{k: v for k, v in data.items()})
+        elif action == "status":
+            return StatusCommand()
+        elif action == "scan":
+            return ScanCommand()
+        elif action == "disk":
+            return DiskCommand()
+        elif action == "sysinfo":
+            return SystemInfoCommand()
+        elif action == "ports":
+            return PortsCommand()
+        elif action == "docker_stats":
+            return DockerStatsCommand()
+        elif action == "ping":
+            return PingCommand(**{k: v for k, v in data.items()})
+        elif action == "kill_process":
+            return KillProcessCommand(**{k: v for k, v in data.items()})
+        elif action == "read_file":
+            return ReadFileCommand(**{k: v for k, v in data.items()})
+    except Exception as e:
+        log.warning(f"LLM parse failed: {e}")
+    return None
+
+async def parse_command(text: str):
+    cmd = _keyword_parse(text)
+    if cmd:
+        log.info(f"Keyword parse: {cmd}")
+        return cmd
+    log.info("Falling back to LLM")
+    return await _llm_parse(text)
