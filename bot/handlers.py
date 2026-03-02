@@ -116,19 +116,26 @@ def confirm_kb(lang):
 # ── ANIMATED LOADER ───────────────────────────────────────────
 async def animate(msg, frames, lang, task):
     """Show animated loading while coroutine runs."""
-    result_holder = {}
+    result_holder = {"out": None, "done": False}
+
     async def runner():
         result_holder["out"] = await task
-    run_task = asyncio.create_task(runner())
+        result_holder["done"] = True
+
+    asyncio.create_task(runner())
     i = 0
-    while not run_task.done():
-        try:
-            await msg.edit_text(frames[i % len(frames)])
-        except Exception:
-            pass
+    last_text = ""
+    while not result_holder["done"]:
+        frame = frames[i % len(frames)]
+        if frame != last_text:
+            try:
+                await msg.edit_text(frame)
+                last_text = frame
+            except Exception:
+                pass
         i += 1
-        await asyncio.sleep(0.9)
-    await run_task
+        await asyncio.sleep(1.2)
+
     return result_holder["out"]
 
 # ── PUBLIC ────────────────────────────────────────────────────
