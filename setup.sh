@@ -1,0 +1,34 @@
+mkdir -p invisible-sysadmin/{bot,core,bridge,protocol,osint,tests}
+cd invisible-sysadmin
+
+cat > pyproject.toml << 'EOF'
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "invisible-sysadmin"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-telegram-bot>=21.0",
+    "pydantic>=2.7.0",
+    "pydantic-ai>=0.0.15",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.27.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0.0",
+    "aiofiles>=23.0.0",
+]
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+EOF
+
+touch bot/__init__.py core/__init__.py bridge/__init__.py protocol/__init__.py osint/__init__.py tests/__init__.py
+
+echo "✅ Готово"
