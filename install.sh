@@ -68,7 +68,7 @@ echo "      1) Локальный SGLang/vLLM (БЕСПЛАТНО) — Enter"
 echo "      2) OpenAI — введи API ключ"
 read -p "  OpenAI API Key [Enter = local]: " OKEY
 if [ -z "$OKEY" ]; then
-    OPENAI_BASE_URL="http://37.140.243.164:8000/v1"
+    OPENAI_BASE_URL="http://37.140.243.164:8001/v1"
     OPENAI_API_KEY="local"
     LLM_MODEL="default"
     success "Используем локальный SGLang (бесплатно)"
